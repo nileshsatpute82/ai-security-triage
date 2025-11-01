@@ -8,8 +8,7 @@
         <div class="chat-config">
             <label>Model:</label>
             <select class="model-select">
-                <option value="claude">Claude 3.5 Sonnet</option>
-                <option value="gpt4">GPT-4</option>
+                <option value="claude">Claude 3.5 Sonnet (AWS Bedrock)</option>
             </select>
             <label>Temperature:</label>
             <input type="range" min="0" max="100" value="30" class="temp-slider">
@@ -21,12 +20,14 @@
         <div class="message ai-message">
             <div class="message-avatar">🤖</div>
             <div class="message-content">
-                <p>Hello! I'm your AI Security Analyst. I can help you:</p>
+                <p><strong>AI Security Analyst Ready</strong></p>
+                <p>Hello! I'm your AI Security Analyst powered by AWS Bedrock. I can help you:</p>
                 <ul>
-                    <li>Analyze security alerts and incidents</li>
-                    <li>Investigate threats and vulnerabilities</li>
-                    <li>Provide recommendations based on best practices</li>
-                    <li>Answer questions about security concepts</li>
+                    <li>🔍 Analyze security alerts and incidents</li>
+                    <li>🕵️ Investigate threats and vulnerabilities</li>
+                    <li>📋 Provide recommendations based on best practices</li>
+                    <li>💡 Answer questions about security concepts</li>
+                    <li>🎯 Explain attack patterns and defenses</li>
                 </ul>
                 <p>How can I assist you today?</p>
             </div>
@@ -37,15 +38,18 @@
         <input type="text" 
                id="chatInput" 
                class="chat-input" 
-               placeholder="Type your security question here..."
+               placeholder="Ask me anything about security..."
                onkeypress="if(event.key==='Enter') sendMessage()">
-        <button class="btn-send" onclick="sendMessage()">Send ➤</button>
+        <button class="btn-send" onclick="sendMessage()" id="sendBtn">Send ➤</button>
     </div>
 </div>
 
 <script>
+let sessionId = 'chat-' + Date.now();
+
 function sendMessage() {
     const input = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
     const message = input.value.trim();
     if (!message) return;
     
@@ -55,41 +59,101 @@ function sendMessage() {
     messagesContainer.innerHTML += `
         <div class="message user-message">
             <div class="message-avatar">👤</div>
-            <div class="message-content"><p>${message}</p></div>
+            <div class="message-content"><p>${escapeHtml(message)}</p></div>
         </div>
     `;
     
     input.value = '';
+    sendBtn.disabled = true;
     
     // Add AI thinking indicator
+    const thinkingId = 'thinking-' + Date.now();
     messagesContainer.innerHTML += `
-        <div class="message ai-message" id="thinkingMessage">
+        <div class="message ai-message" id="${thinkingId}">
             <div class="message-avatar">🤖</div>
             <div class="message-content">
                 <div class="thinking-dots">
                     <span>.</span><span>.</span><span>.</span>
                 </div>
+                <p style="margin-top: 8px; font-size: 0.85rem; color: var(--text-muted);">
+                    Analyzing your question with AI...
+                </p>
             </div>
         </div>
     `;
     
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
     
-    // Simulate AI response (in real implementation, this would call your AI)
-    setTimeout(() => {
-        document.getElementById('thinkingMessage').remove();
+    // Call actual AI
+    fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            message: message,
+            session_id: sessionId
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById(thinkingId).remove();
+        
+        if (data.success) {
+            messagesContainer.innerHTML += `
+                <div class="message ai-message">
+                    <div class="message-avatar">🤖</div>
+                    <div class="message-content">
+                        ${formatAIResponse(data.response)}
+                    </div>
+                </div>
+            `;
+        } else {
+            messagesContainer.innerHTML += `
+                <div class="message ai-message">
+                    <div class="message-avatar">⚠️</div>
+                    <div class="message-content">
+                        <p style="color: var(--danger);">
+                            <strong>Error:</strong> ${escapeHtml(data.error || 'AI request failed')}
+                        </p>
+                        <p style="margin-top: 8px; font-size: 0.9rem;">
+                            This may be due to Bedrock rate limits. Please try again in a moment.
+                        </p>
+                    </div>
+                </div>
+            `;
+        }
+        
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        sendBtn.disabled = false;
+    })
+    .catch(err => {
+        document.getElementById(thinkingId).remove();
         messagesContainer.innerHTML += `
             <div class="message ai-message">
-                <div class="message-avatar">🤖</div>
+                <div class="message-avatar">⚠️</div>
                 <div class="message-content">
-                    <p>I understand you're asking about: "${message}"</p>
-                    <p>Let me analyze this from a security perspective...</p>
-                    <p><strong>Note:</strong> This is a demo interface. In production, this would connect to the AI analysis engine.</p>
+                    <p style="color: var(--danger);"><strong>Connection Error</strong></p>
+                    <p>Unable to reach AI service. Please check your connection and try again.</p>
                 </div>
             </div>
         `;
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }, 1500);
+        sendBtn.disabled = false;
+    });
+}
+
+function formatAIResponse(text) {
+    // Simple markdown-style formatting
+    text = escapeHtml(text);
+    text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/\n\n/g, '</p><p>');
+    text = text.replace(/\n/g, '<br>');
+    return '<p>' + text + '</p>';
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 document.querySelector('.temp-slider').addEventListener('input', function() {

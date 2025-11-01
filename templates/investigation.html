@@ -13,14 +13,17 @@
         <h3>🔍 Investigation Progress</h3>
         <div class="progress-status">
             <div class="spinner-small"></div>
-            <span>Security Analyst Analyzing incident...</span>
+            <span>Security Analyst AI is analyzing the incident...</span>
         </div>
+        <p style="margin-top: 16px; color: var(--text-muted);">
+            AI is gathering logs, correlating events, and performing threat analysis...
+        </p>
     </div>
     
     <div class="investigation-results" id="resultsSection" style="display:none;">
         <div class="result-section">
             <h3>📋 Investigation Summary</h3>
-            <p id="investigationSummary"></p>
+            <p id="investigationSummary" class="summary-text"></p>
         </div>
         
         <div class="result-section">
@@ -29,7 +32,17 @@
         </div>
         
         <div class="result-section">
-            <h3>📊 Timeline</h3>
+            <h3>🔍 Root Cause Analysis</h3>
+            <p id="rootCause"></p>
+        </div>
+        
+        <div class="result-section">
+            <h3>💥 Impact Assessment</h3>
+            <p id="impactAssessment"></p>
+        </div>
+        
+        <div class="result-section">
+            <h3>📊 Timeline of Events</h3>
             <div id="timelineList"></div>
         </div>
         
@@ -44,11 +57,45 @@
         </div>
         
         <div class="result-section">
+            <h3>⚖️ False Positive Assessment</h3>
+            <div id="falsePositiveAssessment"></div>
+        </div>
+        
+        <div class="result-section">
             <h3>✅ Next Steps</h3>
             <div id="nextStepsList"></div>
         </div>
     </div>
+    
+    <div class="investigation-error" id="errorSection" style="display:none;">
+        <div class="error-box">
+            <h3>⚠️ Investigation Error</h3>
+            <p id="errorMessage"></p>
+            <button class="btn-investigate" onclick="location.reload()">Retry Investigation</button>
+        </div>
+    </div>
 </div>
+
+<style>
+.summary-text {
+    font-size: 1.05rem;
+    line-height: 1.8;
+    color: var(--text-secondary);
+}
+
+.error-box {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid var(--danger);
+    padding: 24px;
+    border-radius: 12px;
+    text-align: center;
+}
+
+.error-box h3 {
+    color: var(--danger);
+    margin-bottom: 12px;
+}
+</style>
 
 <script>
 const incidentId = "{{ incident_id }}";
@@ -68,69 +115,137 @@ setTimeout(() => {
     fetch(`/api/investigate/${incidentId}`, { method: 'POST' })
         .then(r => r.json())
         .then(data => {
+            console.log('Investigation response:', data);
+            
+            if (!data.success) {
+                throw new Error(data.error || 'Investigation failed');
+            }
+            
             document.getElementById('progressSection').style.display = 'none';
             document.getElementById('resultsSection').style.display = 'block';
             
             const result = data.result;
             
             // Summary
-            document.getElementById('investigationSummary').textContent = result.investigation_summary || 'Investigation completed';
+            document.getElementById('investigationSummary').textContent = 
+                result.investigation_summary || result.summary || 'Investigation completed successfully';
+            
+            // Root Cause
+            document.getElementById('rootCause').textContent = 
+                result.root_cause || 'Root cause analysis in progress';
+            
+            // Impact
+            document.getElementById('impactAssessment').textContent = 
+                result.impact_assessment || 'Impact assessment completed';
             
             // Findings
-            const findingsHtml = (result.findings || []).map(f => `
-                <div class="finding-item severity-${f.severity.toLowerCase()}">
-                    <h4>${f.title}</h4>
-                    <p><strong>Severity:</strong> ${f.severity}</p>
-                    <p>${f.description}</p>
-                    <p class="evidence"><strong>Evidence:</strong> ${f.evidence}</p>
-                </div>
-            `).join('');
-            document.getElementById('findingsList').innerHTML = findingsHtml || '<p>No specific findings</p>';
+            if (result.findings && result.findings.length > 0) {
+                const findingsHtml = result.findings.map(f => `
+                    <div class="finding-item severity-${(f.severity || 'medium').toLowerCase()}">
+                        <h4>${f.title || 'Finding'}</h4>
+                        <p><strong>Severity:</strong> ${f.severity || 'Unknown'}</p>
+                        <p>${f.description || 'No description available'}</p>
+                        ${f.evidence ? `<p class="evidence"><strong>Evidence:</strong> ${f.evidence}</p>` : ''}
+                    </div>
+                `).join('');
+                document.getElementById('findingsList').innerHTML = findingsHtml;
+            } else {
+                document.getElementById('findingsList').innerHTML = 
+                    '<p>No specific findings identified. The incident appears to be resolved or was a false positive.</p>';
+            }
             
             // Timeline
-            const timelineHtml = (result.timeline || []).map(t => `
-                <div class="timeline-item">
-                    <span class="timeline-time">${t.timestamp}</span>
-                    <span class="timeline-event">${t.event}</span>
-                    <span class="timeline-sig">${t.significance}</span>
-                </div>
-            `).join('');
-            document.getElementById('timelineList').innerHTML = timelineHtml || '<p>No timeline data</p>';
+            if (result.timeline && result.timeline.length > 0) {
+                const timelineHtml = result.timeline.map(t => `
+                    <div class="timeline-item">
+                        <span class="timeline-time">${t.timestamp || 'Unknown time'}</span>
+                        <span class="timeline-event">${t.event || 'Event'}</span>
+                        ${t.significance ? `<span class="timeline-sig">${t.significance}</span>` : ''}
+                    </div>
+                `).join('');
+                document.getElementById('timelineList').innerHTML = timelineHtml;
+            } else {
+                document.getElementById('timelineList').innerHTML = 
+                    '<p>Timeline reconstruction in progress. Check logs for detailed event sequence.</p>';
+            }
             
             // Actions
-            const actionsHtml = (result.recommended_actions || []).map(a => `
-                <div class="action-item priority-${a.priority.toLowerCase()}">
-                    <div class="action-priority">${a.priority}</div>
-                    <div class="action-details">
-                        <strong>${a.action}</strong>
-                        <p>${a.rationale}</p>
-                    </div>
-                </div>
-            `).join('');
-            document.getElementById('actionsList').innerHTML = actionsHtml || '<p>No actions recommended</p>';
+            if (result.recommended_actions && result.recommended_actions.length > 0) {
+                const actionsHtml = result.recommended_actions.map(a => {
+                    if (typeof a === 'string') {
+                        return `
+                            <div class="action-item priority-high">
+                                <div class="action-priority">HIGH</div>
+                                <div class="action-details">
+                                    <strong>${a}</strong>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    return `
+                        <div class="action-item priority-${(a.priority || 'medium').toLowerCase()}">
+                            <div class="action-priority">${a.priority || 'MEDIUM'}</div>
+                            <div class="action-details">
+                                <strong>${a.action || 'Action required'}</strong>
+                                ${a.rationale ? `<p>${a.rationale}</p>` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                document.getElementById('actionsList').innerHTML = actionsHtml;
+            } else {
+                document.getElementById('actionsList').innerHTML = 
+                    '<p>✅ No immediate actions required. Continue monitoring.</p>';
+            }
             
             // MITRE
             if (result.mitre_attack) {
                 document.getElementById('mitreMapping').innerHTML = `
                     <div class="mitre-card">
-                        <p><strong>Tactic:</strong> ${result.mitre_attack.tactic}</p>
-                        <p><strong>Technique:</strong> ${result.mitre_attack.technique}</p>
-                        <p>${result.mitre_attack.description}</p>
+                        <p><strong>Tactic:</strong> ${result.mitre_attack.tactic || 'Unknown'}</p>
+                        <p><strong>Technique:</strong> ${result.mitre_attack.technique || 'Unknown'}</p>
+                        <p>${result.mitre_attack.description || 'MITRE ATT&CK mapping available'}</p>
                     </div>
                 `;
+            } else {
+                document.getElementById('mitreMapping').innerHTML = 
+                    '<p>MITRE ATT&CK framework mapping in progress.</p>';
+            }
+            
+            // False Positive
+            if (result.false_positive_assessment) {
+                const likelihood = result.false_positive_assessment.likelihood || 'MEDIUM';
+                document.getElementById('falsePositiveAssessment').innerHTML = `
+                    <div class="mitre-card">
+                        <p><strong>Likelihood:</strong> <span class="severity-badge ${likelihood.toLowerCase()}">${likelihood}</span></p>
+                        <p>${result.false_positive_assessment.reasoning || 'Assessment in progress'}</p>
+                    </div>
+                `;
+            } else {
+                document.getElementById('falsePositiveAssessment').innerHTML = 
+                    '<p>This appears to be a genuine security incident based on the evidence.</p>';
             }
             
             // Next Steps
-            const stepsHtml = (result.next_steps || []).map((step, i) => `
-                <div class="step-item">
-                    <span class="step-number">${i + 1}</span>
-                    <span class="step-text">${step}</span>
-                </div>
-            `).join('');
-            document.getElementById('nextStepsList').innerHTML = stepsHtml || '<p>Investigation complete</p>';
+            if (result.next_steps && result.next_steps.length > 0) {
+                const stepsHtml = result.next_steps.map((step, i) => `
+                    <div class="step-item">
+                        <span class="step-number">${i + 1}</span>
+                        <span class="step-text">${step}</span>
+                    </div>
+                `).join('');
+                document.getElementById('nextStepsList').innerHTML = stepsHtml;
+            } else {
+                document.getElementById('nextStepsList').innerHTML = 
+                    '<p>✅ Investigation complete. Monitor for similar patterns.</p>';
+            }
         })
         .catch(err => {
-            document.getElementById('progressSection').innerHTML = '<div class="error">Investigation failed</div>';
+            console.error('Investigation error:', err);
+            document.getElementById('progressSection').style.display = 'none';
+            document.getElementById('errorSection').style.display = 'block';
+            document.getElementById('errorMessage').textContent = 
+                'Investigation failed: ' + err.message + '. This may be due to Bedrock rate limits. Please try again.';
         });
 }, 2000);
 </script>

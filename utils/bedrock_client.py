@@ -153,3 +153,64 @@ def create_error_response(error_message):
         'critical_count': 0,
         'recommended_actions': ['Check AWS Bedrock access', 'Verify credentials']
     }
+
+def chat_with_bedrock(user_message, context=None):
+    """Chat with AI Security Analyst using Bedrock"""
+    bedrock = get_bedrock_client()
+    
+    # Build chat prompt with context
+    if context and context.get('last_message'):
+        prompt = f"""You are an expert AI Security Analyst. 
+
+Previous conversation:
+User: {context.get('last_message')}
+You: {context.get('last_response')}
+
+Current user question:
+{user_message}
+
+Provide a helpful, detailed response about security. Be conversational but professional. 
+If the question is about security threats, vulnerabilities, or best practices, provide actionable advice.
+If you don't know something, say so honestly.
+
+Keep your response concise but informative (2-4 paragraphs)."""
+    else:
+        prompt = f"""You are an expert AI Security Analyst.
+
+User question:
+{user_message}
+
+Provide a helpful, detailed response about security. Be conversational but professional.
+If the question is about security threats, vulnerabilities, or best practices, provide actionable advice.
+If you don't know something, say so honestly.
+
+Keep your response concise but informative (2-4 paragraphs)."""
+    
+    model_ids = [
+        "anthropic.claude-3-5-sonnet-20240620-v1:0",
+        "anthropic.claude-3-sonnet-20240229-v1:0",
+        "anthropic.claude-v2:1",
+    ]
+    
+    for model_id in model_ids:
+        try:
+            response = bedrock.invoke_model(
+                modelId=model_id,
+                body=json.dumps({
+                    "anthropic_version": "bedrock-2023-05-31",
+                    "max_tokens": 2048,
+                    "temperature": 0.5,
+                    "messages": [{"role": "user", "content": prompt}]
+                })
+            )
+            
+            response_body = json.loads(response['body'].read())
+            ai_text = response_body['content'][0]['text']
+            
+            return ai_text.strip()
+            
+        except Exception as e:
+            print(f"Error with {model_id}: {e}")
+            continue
+    
+    return "I apologize, but I'm having trouble connecting to the AI service right now. Please try again in a moment."

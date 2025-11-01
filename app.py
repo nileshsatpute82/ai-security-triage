@@ -228,3 +228,39 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
+@app.route('/api/chat', methods=['POST'])
+def chat_with_ai():
+    """Chat with AI Security Analyst"""
+    try:
+        data = request.json
+        message = data.get('message', '')
+        session_id = data.get('session_id', str(uuid.uuid4()))
+        
+        if not message:
+            return jsonify({'success': False, 'error': 'No message provided'}), 400
+        
+        # Get chat history for context
+        chat_context = conversations.get(f'chat-{session_id}', {})
+        
+        # Build chat prompt
+        from utils.bedrock_client import chat_with_bedrock
+        
+        response_text = chat_with_bedrock(message, chat_context)
+        
+        # Save conversation
+        conversations[f'chat-{session_id}'] = {
+            'last_message': message,
+            'last_response': response_text,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        return jsonify({
+            'success': True,
+            'response': response_text,
+            'session_id': session_id
+        })
+        
+    except Exception as e:
+        print(f"Chat error: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
