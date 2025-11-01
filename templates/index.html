@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>AI Security Alert Triage</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="badge">AWS AI-DLC Framework</div>
+            <h1>🛡️ AI Security Alert Triage</h1>
+            <p class="subtitle">Powered by Amazon Bedrock</p>
+        </header>
+        
+        <div class="stats-bar" id="statsBar" style="display:none;">
+            <div class="stat"><span class="stat-value" id="totalAlerts">0</span><span class="stat-label">Total</span></div>
+            <div class="stat"><span class="stat-value critical" id="criticalAlerts">0</span><span class="stat-label">Critical</span></div>
+            <div class="stat"><span class="stat-value high" id="highAlerts">0</span><span class="stat-label">High</span></div>
+        </div>
+        
+        <div class="control-panel">
+            <h2>Control Panel</h2>
+            <select id="alertCount">
+                <option value="10" selected>10 alerts</option>
+                <option value="20">20 alerts</option>
+                <option value="50">50 alerts</option>
+            </select>
+            <button onclick="generateAndAnalyze()" id="analyzeBtn" class="btn-primary">🤖 Analyze with AI</button>
+            <input type="text" id="userQuery" placeholder="Optional: Ask AI a question">
+        </div>
+        
+        <div id="loadingArea" style="display:none; padding:60px; text-align:center; background:#f8f9fa;">
+            <div class="spinner"></div>
+            <p>🧠 AI analyzing alerts...</p>
+        </div>
+        
+        <div id="resultsArea" style="display:none;">
+            <div class="ai-summary"><h2>AI Summary</h2><p id="aiSummary"></p></div>
+            <div class="top-critical"><h2>Top 3 Critical</h2><div id="topCritical"></div></div>
+            <div class="triaged-alerts"><h2>All Alerts</h2><div id="alertsList"></div></div>
+            <div class="recommendations"><h2>Actions</h2><ol id="recommendationsList"></ol></div>
+        </div>
+        
+        <footer><p>AWS AI-DLC Hackathon Practice</p></footer>
+    </div>
+    
+    <script>
+        let sessionId = 'session-' + Date.now();
+        let currentAlerts = [];
+        
+        async function generateAndAnalyze() {
+            const btn = document.getElementById('analyzeBtn');
+            const loading = document.getElementById('loadingArea');
+            const results = document.getElementById('resultsArea');
+            
+            btn.disabled = true;
+            loading.style.display = 'block';
+            results.style.display = 'none';
+            
+            try {
+                const alertsResp = await fetch('/api/generate-alerts', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({count: parseInt(document.getElementById('alertCount').value)})
+                });
+                const alertsData = await alertsResp.json();
+                currentAlerts = alertsData.alerts;
+                
+                const triageResp = await fetch('/api/triage', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        alerts: currentAlerts,
+                        query: document.getElementById('userQuery').value,
+                        session_id: sessionId
+                    })
+                });
+                const triageData = await triageResp.json();
+                
+                displayResults(triageData.response);
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                loading.style.display = 'none';
+            }
+        }
+        
+        function displayResults(response) {
+            document.getElementById('statsBar').style.display = 'flex';
+            document.getElementById('totalAlerts').textContent = currentAlerts.length;
+            document.getElementById('criticalAlerts').textContent = response.critical_count || 0;
+            document.getElementById('highAlerts').textContent = response.high_count || 0;
+            document.getElementById('aiSummary').textContent = response.summary || '';
+            
+            const topDiv = document.getElementById('topCritical');
+            topDiv.innerHTML = '';
+            (response.top_3_critical || []).forEach((item, i) => {
+                topDiv.innerHTML += '<div class="critical-item"><strong>' + (i+1) + '.</strong> ' + item + '</div>';
+            });
+            
+            const alertsList = document.getElementById('alertsList');
+            alertsList.innerHTML = '';
+            (response.triaged_alerts || []).forEach(alert => {
+                const card = document.createElement('div');
+                card.className = 'alert-card priority-' + alert.ai_priority.toLowerCase();
+                card.innerHTML = '<div class="alert-header"><span class="alert-id">' + alert.alert_id + '</span><span class="priority-badge ' + alert.ai_priority.toLowerCase() + '">' + alert.ai_priority + '</span></div><p><strong>Explanation:</strong> ' + alert.plain_english_explanation + '</p><p><strong>Threat:</strong> ' + alert.threat_type + '</p><p><strong>Evidence:</strong> ' + alert.evidence + '</p>';
+                alertsList.appendChild(card);
+            });
+            
+            const recList = document.getElementById('recommendationsList');
+            recList.innerHTML = '';
+            (response.recommended_actions || []).forEach(action => {
+                recList.innerHTML += '<li>' + action + '</li>';
+            });
+            
+            document.getElementById('resultsArea').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
