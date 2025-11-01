@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Application Security Dashboard{% endblock %}
+{% block page_title %}Application Security Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="dashboard-notice">
+        <span>⚠️</span> Data generated for demonstration purposes only
+    </div>
+    
+    <!-- Stats Cards -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-header">
+                <h3>Applications Security Tested</h3>
+                <span class="stat-change positive">↑ Targets: 100%</span>
+            </div>
+            <div class="stat-value">83%</div>
+            <div class="stat-label">% Apps Tested (SAST, DAST, SCA, Pen Testing)</div>
+        </div>
+        
+        <div class="stat-card critical">
+            <div class="stat-header">
+                <h3>Critical Vulnerabilities Open</h3>
+                <span class="stat-change negative">↑ Fires: 90%</span>
+            </div>
+            <div class="stat-value" id="criticalCount">2</div>
+        </div>
+        
+        <div class="stat-card positive">
+            <div class="stat-header">
+                <h3>Dependency Coverage</h3>
+                <span class="stat-change positive">↑ Goals: >95%</span>
+            </div>
+            <div class="stat-value">85%</div>
+        </div>
+        
+        <div class="stat-card positive">
+            <div class="stat-header">
+                <h3>Projects with Threat Models</h3>
+                <span class="stat-change positive">↑ Targets: 100%</span>
+            </div>
+            <div class="stat-value">88%</div>
+        </div>
+    </div>
+    
+    <!-- Charts Section -->
+    <div class="charts-section">
+        <div class="chart-card">
+            <h3>Section 1: Application Security Health Overview (Real-Time KPIs)</h3>
+            <div class="chart-container">
+                <canvas id="healthChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="chart-card">
+            <h3>Applications by Risk Tier (Critical, High, Medium, Low)</h3>
+            <div class="chart-container">
+                <canvas id="riskChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Fetch stats
+fetch('/api/dashboard/stats')
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('criticalCount').textContent = data.stats.critical_vulnerabilities;
+        }
+    });
+
+// Health Chart (Gauge)
+const healthCtx = document.getElementById('healthChart').getContext('2d');
+new Chart(healthCtx, {
+    type: 'doughnut',
+    data: {
+        datasets: [{
+            data: [83, 17],
+            backgroundColor: ['#10b981', '#1f2937'],
+            borderWidth: 0
+        }]
+    },
+    options: {
+        circumference: 180,
+        rotation: 270,
+        cutout: '75%',
+        plugins: {
+            legend: { display: false },
+            tooltip: { enabled: false }
+        }
+    }
+});
+
+// Risk Tier Chart
+const riskCtx = document.getElementById('riskChart').getContext('2d');
+new Chart(riskCtx, {
+    type: 'bar',
+    data: {
+        labels: ['Critical', 'High', 'Medium', 'Low'],
+        datasets: [{
+            data: [15, 45, 80, 120],
+            backgroundColor: ['#dc2626', '#f59e0b', '#3b82f6', '#10b981']
+        }]
+    },
+    options: {
+        scales: {
+            y: { beginAtZero: true, grid: { color: '#374151' } },
+            x: { grid: { display: false } }
+        },
+        plugins: { legend: { display: false } }
+    }
+});
+</script>
+{% endblock %}

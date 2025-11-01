@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}AI Security Chat{% endblock %}
+{% block page_title %}Chat with AI Security Analyst{% endblock %}
+
+{% block content %}
+<div class="chat-container">
+    <div class="chat-header">
+        <div class="chat-config">
+            <label>Model:</label>
+            <select class="model-select">
+                <option value="claude">Claude 3.5 Sonnet</option>
+                <option value="gpt4">GPT-4</option>
+            </select>
+            <label>Temperature:</label>
+            <input type="range" min="0" max="100" value="30" class="temp-slider">
+            <span id="tempValue">0.30</span>
+        </div>
+    </div>
+    
+    <div class="chat-messages" id="chatMessages">
+        <div class="message ai-message">
+            <div class="message-avatar">🤖</div>
+            <div class="message-content">
+                <p>Hello! I'm your AI Security Analyst. I can help you:</p>
+                <ul>
+                    <li>Analyze security alerts and incidents</li>
+                    <li>Investigate threats and vulnerabilities</li>
+                    <li>Provide recommendations based on best practices</li>
+                    <li>Answer questions about security concepts</li>
+                </ul>
+                <p>How can I assist you today?</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="chat-input-area">
+        <input type="text" 
+               id="chatInput" 
+               class="chat-input" 
+               placeholder="Type your security question here..."
+               onkeypress="if(event.key==='Enter') sendMessage()">
+        <button class="btn-send" onclick="sendMessage()">Send ➤</button>
+    </div>
+</div>
+
+<script>
+function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const message = input.value.trim();
+    if (!message) return;
+    
+    const messagesContainer = document.getElementById('chatMessages');
+    
+    // Add user message
+    messagesContainer.innerHTML += `
+        <div class="message user-message">
+            <div class="message-avatar">👤</div>
+            <div class="message-content"><p>${message}</p></div>
+        </div>
+    `;
+    
+    input.value = '';
+    
+    // Add AI thinking indicator
+    messagesContainer.innerHTML += `
+        <div class="message ai-message" id="thinkingMessage">
+            <div class="message-avatar">🤖</div>
+            <div class="message-content">
+                <div class="thinking-dots">
+                    <span>.</span><span>.</span><span>.</span>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    
+    // Simulate AI response (in real implementation, this would call your AI)
+    setTimeout(() => {
+        document.getElementById('thinkingMessage').remove();
+        messagesContainer.innerHTML += `
+            <div class="message ai-message">
+                <div class="message-avatar">🤖</div>
+                <div class="message-content">
+                    <p>I understand you're asking about: "${message}"</p>
+                    <p>Let me analyze this from a security perspective...</p>
+                    <p><strong>Note:</strong> This is a demo interface. In production, this would connect to the AI analysis engine.</p>
+                </div>
+            </div>
+        `;
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }, 1500);
+}
+
+document.querySelector('.temp-slider').addEventListener('input', function() {
+    document.getElementById('tempValue').textContent = (this.value / 100).toFixed(2);
+});
+</script>
+{% endblock %}

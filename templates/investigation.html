@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Investigation{% endblock %}
+{% block page_title %}Investigating Incident{% endblock %}
+
+{% block content %}
+<div class="investigation-container">
+    <div class="investigation-header">
+        <h2 id="incidentTitle">Loading...</h2>
+        <p id="incidentId" class="incident-id-text"></p>
+    </div>
+    
+    <div class="investigation-progress" id="progressSection">
+        <h3>🔍 Investigation Progress</h3>
+        <div class="progress-status">
+            <div class="spinner-small"></div>
+            <span>Security Analyst Analyzing incident...</span>
+        </div>
+    </div>
+    
+    <div class="investigation-results" id="resultsSection" style="display:none;">
+        <div class="result-section">
+            <h3>📋 Investigation Summary</h3>
+            <p id="investigationSummary"></p>
+        </div>
+        
+        <div class="result-section">
+            <h3>🎯 Key Findings</h3>
+            <div id="findingsList"></div>
+        </div>
+        
+        <div class="result-section">
+            <h3>📊 Timeline</h3>
+            <div id="timelineList"></div>
+        </div>
+        
+        <div class="result-section">
+            <h3>🔧 Recommended Actions</h3>
+            <div id="actionsList"></div>
+        </div>
+        
+        <div class="result-section">
+            <h3>🎭 MITRE ATT&CK Mapping</h3>
+            <div id="mitreMapping"></div>
+        </div>
+        
+        <div class="result-section">
+            <h3>✅ Next Steps</h3>
+            <div id="nextStepsList"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+const incidentId = "{{ incident_id }}";
+
+// Load incident details
+fetch(`/api/incidents/${incidentId}`)
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('incidentTitle').textContent = `Investigating: ${data.incident.title}`;
+            document.getElementById('incidentId').textContent = `Incident ID: ${data.incident.id}`;
+        }
+    });
+
+// Start investigation
+setTimeout(() => {
+    fetch(`/api/investigate/${incidentId}`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('progressSection').style.display = 'none';
+            document.getElementById('resultsSection').style.display = 'block';
+            
+            const result = data.result;
+            
+            // Summary
+            document.getElementById('investigationSummary').textContent = result.investigation_summary || 'Investigation completed';
+            
+            // Findings
+            const findingsHtml = (result.findings || []).map(f => `
+                <div class="finding-item severity-${f.severity.toLowerCase()}">
+                    <h4>${f.title}</h4>
+                    <p><strong>Severity:</strong> ${f.severity}</p>
+                    <p>${f.description}</p>
+                    <p class="evidence"><strong>Evidence:</strong> ${f.evidence}</p>
+                </div>
+            `).join('');
+            document.getElementById('findingsList').innerHTML = findingsHtml || '<p>No specific findings</p>';
+            
+            // Timeline
+            const timelineHtml = (result.timeline || []).map(t => `
+                <div class="timeline-item">
+                    <span class="timeline-time">${t.timestamp}</span>
+                    <span class="timeline-event">${t.event}</span>
+                    <span class="timeline-sig">${t.significance}</span>
+                </div>
+            `).join('');
+            document.getElementById('timelineList').innerHTML = timelineHtml || '<p>No timeline data</p>';
+            
+            // Actions
+            const actionsHtml = (result.recommended_actions || []).map(a => `
+                <div class="action-item priority-${a.priority.toLowerCase()}">
+                    <div class="action-priority">${a.priority}</div>
+                    <div class="action-details">
+                        <strong>${a.action}</strong>
+                        <p>${a.rationale}</p>
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('actionsList').innerHTML = actionsHtml || '<p>No actions recommended</p>';
+            
+            // MITRE
+            if (result.mitre_attack) {
+                document.getElementById('mitreMapping').innerHTML = `
+                    <div class="mitre-card">
+                        <p><strong>Tactic:</strong> ${result.mitre_attack.tactic}</p>
+                        <p><strong>Technique:</strong> ${result.mitre_attack.technique}</p>
+                        <p>${result.mitre_attack.description}</p>
+                    </div>
+                `;
+            }
+            
+            // Next Steps
+            const stepsHtml = (result.next_steps || []).map((step, i) => `
+                <div class="step-item">
+                    <span class="step-number">${i + 1}</span>
+                    <span class="step-text">${step}</span>
+                </div>
+            `).join('');
+            document.getElementById('nextStepsList').innerHTML = stepsHtml || '<p>Investigation complete</p>';
+        })
+        .catch(err => {
+            document.getElementById('progressSection').innerHTML = '<div class="error">Investigation failed</div>';
+        });
+}, 2000);
+</script>
+{% endblock %}

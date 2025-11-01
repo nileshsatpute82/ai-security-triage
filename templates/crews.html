@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}AI Security Crews{% endblock %}
+{% block page_title %}AI Security Crews{% endblock %}
+
+{% block content %}
+<div class="crews-container">
+    <div class="crews-header">
+        <h2>Crew Catalog</h2>
+        <p class="subtitle">Specialized AI agents for different security domains</p>
+    </div>
+    
+    <div class="crews-list" id="crewsList">
+        <div class="loading-spinner">Loading crews...</div>
+    </div>
+</div>
+
+<script>
+fetch('/api/crews')
+    .then(r => r.json())
+    .then(data => {
+        const container = document.getElementById('crewsList');
+        if (!data.success) {
+            container.innerHTML = '<div class="error">Error loading crews</div>';
+            return;
+        }
+        
+        container.innerHTML = data.crews.map(crew => `
+            <div class="crew-card">
+                <div class="crew-header">
+                    <h3>${crew.name}</h3>
+                    <span class="status-badge ${crew.status}">${crew.status}</span>
+                </div>
+                <p class="crew-description">${crew.description}</p>
+                <div class="crew-capabilities">
+                    <strong>Capabilities:</strong>
+                    ${crew.capabilities.map(cap => `<span class="capability-tag">${cap}</span>`).join('')}
+                </div>
+                <div class="crew-footer">
+                    <span class="crew-id">${crew.id}</span>
+                    <button class="btn-secondary" onclick="activateCrew('${crew.id}')">Activate</button>
+                </div>
+            </div>
+        `).join('');
+    });
+
+function activateCrew(crewId) {
+    alert(`Activating crew: ${crewId}\nThis crew will now monitor security events in its domain.`);
+}
+</script>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Security Incidents{% endblock %}
+{% block page_title %}Security Incidents{% endblock %}
+
+{% block content %}
+<div class="incidents-container">
+    <div class="incidents-header">
+        <div class="search-filters">
+            <input type="text" placeholder="Search Incidents" class="search-input" id="searchInput">
+            <select class="filter-select">
+                <option value="all">All Severity</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+            </select>
+            <select class="filter-select">
+                <option value="all">All Status</option>
+                <option value="new">New</option>
+                <option value="investigating">Investigating</option>
+                <option value="resolved">Resolved</option>
+            </select>
+        </div>
+    </div>
+    
+    <div class="incidents-list" id="incidentsList">
+        <div class="loading-spinner">Loading incidents...</div>
+    </div>
+</div>
+
+<script>
+function loadIncidents() {
+    fetch('/api/incidents')
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('incidentsList');
+            if (!data.success || !data.incidents.length) {
+                container.innerHTML = '<div class="no-data">No incidents found</div>';
+                return;
+            }
+            
+            container.innerHTML = data.incidents.map(incident => `
+                <div class="incident-card severity-${incident.severity.toLowerCase()}">
+                    <div class="incident-header">
+                        <div class="incident-info">
+                            <h3 class="incident-title">${incident.title}</h3>
+                            <p class="incident-id">${incident.id}</p>
+                            <p class="incident-description">${incident.description}</p>
+                        </div>
+                        <div class="incident-meta">
+                            <span class="severity-badge ${incident.severity.toLowerCase()}">${incident.severity}</span>
+                            <span class="status-badge ${incident.status.toLowerCase()}">${incident.status}</span>
+                        </div>
+                    </div>
+                    <div class="incident-footer">
+                        <span class="incident-time">Created: ${new Date(incident.created).toLocaleString()}</span>
+                        <span class="incident-source">Source: ${incident.source}</span>
+                        <button class="btn-investigate" onclick="investigateIncident('${incident.id}')">
+                            🔍 Investigate
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        })
+        .catch(err => {
+            document.getElementById('incidentsList').innerHTML = '<div class="error">Error loading incidents</div>';
+        });
+}
+
+function investigateIncident(incidentId) {
+    window.location.href = `/investigation/${incidentId}`;
+}
+
+loadIncidents();
+</script>
+{% endblock %}

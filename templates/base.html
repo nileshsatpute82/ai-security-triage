@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Security Operations Platform{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dark-theme.css') }}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1 class="logo">🛡️ SecOps AI</h1>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <a href="/dashboard" class="nav-item {% if request.path == '/dashboard' %}active{% endif %}">
+                    <span class="nav-icon">📊</span>
+                    <span>Dashboard</span>
+                </a>
+                <a href="/incidents" class="nav-item {% if '/incidents' in request.path %}active{% endif %}">
+                    <span class="nav-icon">🚨</span>
+                    <span>Incidents</span>
+                </a>
+                <a href="/crews" class="nav-item {% if request.path == '/crews' %}active{% endif %}">
+                    <span class="nav-icon">🤖</span>
+                    <span>AI Crews</span>
+                </a>
+                <a href="/chat" class="nav-item {% if request.path == '/chat' %}active{% endif %}">
+                    <span class="nav-icon">💬</span>
+                    <span>AI Chat</span>
+                </a>
+                <a href="/" class="nav-item {% if request.path == '/' %}active{% endif %}">
+                    <span class="nav-icon">🎯</span>
+                    <span>Alert Triage</span>
+                </a>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar">👤</div>
+                    <div class="user-details">
+                        <div class="user-name">Security Analyst</div>
+                        <div class="user-role">Administrator</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+        
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="topbar">
+                <div class="topbar-left">
+                    <h2 class="page-title">{% block page_title %}Dashboard{% endblock %}</h2>
+                </div>
+                <div class="topbar-right">
+                    <button class="icon-btn">🔔</button>
+                    <button class="icon-btn">⚙️</button>
+                </div>
+            </header>
+            
+            <div class="content-area">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
