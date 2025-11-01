@@ -15,62 +15,70 @@ def analyze_alerts_with_ai(alerts, user_query='', context=None):
     bedrock = get_bedrock_client()
     prompt = build_triage_prompt(alerts, user_query, context or {})
     
-    try:
-        response = bedrock.invoke_model(
-            modelId="anthropic.claude-sonnet-4-5-20250929-v1:0",
-            body=json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 4096,
-                "temperature": 0.3,
-                "messages": [{"role": "user", "content": prompt}]
-            })
-        )
-        
-        response_body = json.loads(response['body'].read())
-        ai_text = response_body['content'][0]['text']
-        
-        # Clean up the response - remove markdown code blocks
-        ai_text = ai_text.strip()
-        # Remove ```json and ``` markers
-        ai_text = re.sub(r'^```json\s*', '', ai_text)
-        ai_text = re.sub(r'^```\s*', '', ai_text)
-        ai_text = re.sub(r'\s*```$', '', ai_text)
-        ai_text = ai_text.strip()
-        
+    # Try these model IDs in order until one works
+    model_ids = [
+        "anthropic.claude-3-5-sonnet-20240620-v1:0",  # Claude 3.5 Sonnet (most common)
+        "anthropic.claude-3-sonnet-20240229-v1:0",    # Claude 3 Sonnet
+        "anthropic.claude-v2:1",                       # Claude 2.1 (fallback)
+    ]
+    
+    last_error = None
+    
+    for model_id in model_ids:
         try:
-            ai_analysis = json.loads(ai_text)
-        except json.JSONDecodeError as e:
-            print(f"JSON Parse Error: {e}")
-            print(f"AI Response: {ai_text[:500]}")  # Log first 500 chars
-            # Fallback response
-            ai_analysis = {
-                'summary': 'AI analysis completed but response format was unexpected. Please check logs.',
-                'triaged_alerts': [],
-                'critical_count': 0,
-                'high_count': 0,
-                'false_positive_count': 0,
-                'top_3_critical': ['Unable to parse AI response'],
-                'recommended_actions': ['Check application logs', 'Verify Bedrock access'],
-                'questions_for_analyst': [],
-                'ai_dlc_notes': f'Error: {str(e)}'
-            }
-        
-        return ai_analysis
-        
-    except Exception as e:
-        print(f"Bedrock error: {str(e)}")
-        # Return a user-friendly error
-        return {
-            'summary': f'Error connecting to AWS Bedrock: {str(e)}',
-            'triaged_alerts': [],
-            'critical_count': 0,
-            'high_count': 0,
-            'false_positive_count': 0,
-            'top_3_critical': ['Bedrock connection failed'],
-            'recommended_actions': ['Check AWS credentials', 'Verify Bedrock access in region', 'Check IAM permissions'],
-            'questions_for_analyst': [],
-            'ai_dlc_notes': f'Bedrock API Error: {str(e)}'
-        }
+            print(f"Trying model: {model_id}")
+            response = bedrock.invoke_model(
+                modelId=model_id,
+                body=json.dumps({
+                    "anthropic_version": "bedrock-2023-05-31",
+                    "max_tokens": 4096,
+                    "temperature": 0.3,
+                    "messages": [{"role": "user", "content": prompt}]
+                })
+            )
+            
+            response_body = json.loads(response['body'].read())
+            ai_text = response_body['content'][0]['text']
+            
+            # Clean up the response - remove markdown code blocks
+            ai_text = ai_text.strip()
+            ai_text = re.sub(r'^```json\s*', '', ai_text)
+            ai_text = re.sub(r'^```\s*', '', ai_text)
+            ai_text = re.sub(r'\s*```$', '', ai_text)
+            ai_text = ai_text.strip()
+            
+            try:
+                ai_analysis = json.loads(ai_text)
+                print(f"✅ Successfully used model: {model_id}")
+                return ai_analysis
+            except json.JSONDecodeError as e:
+                print(f"JSON Parse Error with {model_id}: {e}")
+                print(f"AI Response: {ai_text[:500]}")
+                # Try next model
+                continue
+                
+        except Exception as e:
+            print(f"Error with model {model_id}: {str(e)}")
+            last_error = str(e)
+            continue
+    
+    # If all models failed, return error response
+    return {
+        'summary': f'Unable to connect to any Claude model. Last error: {last_error}',
+        'triaged_alerts': [],
+        'critical_count': 0,
+        'high_count': 0,
+        'false_positive_count': 0,
+        'top_3_critical': ['Bedrock connection failed - check model access'],
+        'recommended_actions': [
+            'Go to AWS Bedrock console',
+            'Click "Model access"',
+            'Enable access to Claude 3.5 Sonnet',
+            'Wait 1-2 minutes for activation'
+        ],
+        'questions_for_analyst': [],
+        'ai_dlc_notes': f'Error: {last_error}'
+    }
 
 def build_triage_prompt(alerts, user_query, context):
     return f"""You are a security analyst AI using AI-DLC methodology.
@@ -81,7 +89,7 @@ USER QUERY: {user_query or "Analyze and prioritize these alerts"}
 
 Analyze for risk, prioritize, provide plain-English explanations.
 
-CRITICAL: You MUST respond with ONLY valid JSON. No markdown, no code blocks, no explanations outside the JSON.
+CRITICAL: Respond with ONLY valid JSON. No markdown, no code blocks, no text outside JSON.
 
 {{
     "summary": "Brief overview (2-3 sentences)",
@@ -108,4 +116,4 @@ CRITICAL: You MUST respond with ONLY valid JSON. No markdown, no code blocks, no
     "ai_dlc_notes": "Context saved"
 }}
 
-Respond with ONLY the JSON object above. Do not wrap it in markdown code blocks."""
+Respond with ONLY the JSON object. No markdown code blocks."""
