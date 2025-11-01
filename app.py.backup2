@@ -3,7 +3,7 @@ import os
 import json
 import uuid
 from datetime import datetime
-from utils.bedrock_client import analyze_alerts_with_ai, investigate_incident_with_ai, chat_with_bedrock
+from utils.bedrock_client import analyze_alerts_with_ai, investigate_incident_with_ai
 from utils.alert_generator import generate_sample_alerts
 from utils.crews import get_available_crews, get_crew_by_id
 
@@ -15,7 +15,7 @@ conversations = {}
 incidents = {}
 investigations = {}
 
-# Initialize sample incidents
+# Initialize some sample incidents
 def init_sample_incidents():
     sample_incidents = [
         {
@@ -60,7 +60,6 @@ def init_sample_incidents():
 
 init_sample_incidents()
 
-# Routes
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -147,12 +146,11 @@ def investigate_incident(incident_id):
         if not incident:
             return jsonify({'success': False, 'error': 'Incident not found'}), 404
         
+        # Start investigation
         investigation_id = f"INV-{incident_id}"
         
         # Use AI to investigate
-        print(f"Starting investigation for {incident_id}")
         investigation_result = investigate_incident_with_ai(incident)
-        print(f"Investigation result: {investigation_result}")
         
         investigations[investigation_id] = {
             'id': investigation_id,
@@ -162,6 +160,7 @@ def investigate_incident(incident_id):
             'timestamp': datetime.now().isoformat()
         }
         
+        # Update incident status
         incidents[incident_id]['status'] = 'Investigating'
         
         return jsonify({
@@ -171,8 +170,6 @@ def investigate_incident(incident_id):
         })
     except Exception as e:
         print(f"Investigation error: {str(e)}")
-        import traceback
-        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/investigation/<investigation_id>', methods=['GET'])
@@ -203,43 +200,6 @@ def get_crew(crew_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/chat', methods=['POST'])
-def chat_with_ai():
-    """Chat with AI Security Analyst"""
-    try:
-        data = request.json
-        message = data.get('message', '')
-        session_id = data.get('session_id', str(uuid.uuid4()))
-        
-        if not message:
-            return jsonify({'success': False, 'error': 'No message provided'}), 400
-        
-        # Get chat history for context
-        chat_context = conversations.get(f'chat-{session_id}', {})
-        
-        print(f"Chat request: {message}")
-        response_text = chat_with_bedrock(message, chat_context)
-        print(f"Chat response: {response_text[:100]}...")
-        
-        # Save conversation
-        conversations[f'chat-{session_id}'] = {
-            'last_message': message,
-            'last_response': response_text,
-            'timestamp': datetime.now().isoformat()
-        }
-        
-        return jsonify({
-            'success': True,
-            'response': response_text,
-            'session_id': session_id
-        })
-        
-    except Exception as e:
-        print(f"Chat error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
 @app.route('/api/dashboard/stats', methods=['GET'])
 def get_dashboard_stats():
     try:
@@ -268,3 +228,39 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
+@app.route('/api/chat', methods=['POST'])
+def chat_with_ai():
+    """Chat with AI Security Analyst"""
+    try:
+        data = request.json
+        message = data.get('message', '')
+        session_id = data.get('session_id', str(uuid.uuid4()))
+        
+        if not message:
+            return jsonify({'success': False, 'error': 'No message provided'}), 400
+        
+        # Get chat history for context
+        chat_context = conversations.get(f'chat-{session_id}', {})
+        
+        # Build chat prompt
+        from utils.bedrock_client import chat_with_bedrock
+        
+        response_text = chat_with_bedrock(message, chat_context)
+        
+        # Save conversation
+        conversations[f'chat-{session_id}'] = {
+            'last_message': message,
+            'last_response': response_text,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        return jsonify({
+            'success': True,
+            'response': response_text,
+            'session_id': session_id
+        })
+        
+    except Exception as e:
+        print(f"Chat error: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500

@@ -11,18 +11,8 @@ def get_bedrock_client():
         aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY')
     )
 
-def analyze_alerts_with_ai(alerts, user_query='', context=None):
-    bedrock = get_bedrock_client()
-    prompt = build_triage_prompt(alerts, user_query, context or {})
-    return call_bedrock_with_fallback(bedrock, prompt)
-
-def investigate_incident_with_ai(incident):
-    """Automated investigation using AI"""
-    bedrock = get_bedrock_client()
-    prompt = build_investigation_prompt(incident)
-    return call_bedrock_with_fallback(bedrock, prompt)
-
 def call_bedrock_with_fallback(bedrock, prompt):
+    """Try multiple model IDs until one works"""
     model_ids = [
         "anthropic.claude-3-5-sonnet-20240620-v1:0",
         "anthropic.claude-3-sonnet-20240229-v1:0",
@@ -31,6 +21,7 @@ def call_bedrock_with_fallback(bedrock, prompt):
     
     for model_id in model_ids:
         try:
+            print(f"Trying model: {model_id}")
             response = bedrock.invoke_model(
                 modelId=model_id,
                 body=json.dumps({
@@ -43,33 +34,117 @@ def call_bedrock_with_fallback(bedrock, prompt):
             
             response_body = json.loads(response['body'].read())
             ai_text = response_body['content'][0]['text']
-            ai_text = clean_json_response(ai_text)
+            print(f"✅ Successfully used model: {model_id}")
+            return ai_text.strip()
             
-            try:
-                return json.loads(ai_text)
-            except:
-                continue
         except Exception as e:
             print(f"Error with {model_id}: {e}")
             continue
     
-    return create_error_response("Unable to connect to AI model")
+    raise Exception("Unable to connect to any AI model")
 
 def clean_json_response(text):
+    """Remove markdown code blocks from JSON"""
     text = text.strip()
     text = re.sub(r'^```json\s*', '', text)
     text = re.sub(r'^```\s*', '', text)
     text = re.sub(r'\s*```$', '', text)
     return text.strip()
 
+def analyze_alerts_with_ai(alerts, user_query='', context=None):
+    """Analyze security alerts using AI"""
+    bedrock = get_bedrock_client()
+    prompt = build_triage_prompt(alerts, user_query, context or {})
+    
+    ai_text = call_bedrock_with_fallback(bedrock, prompt)
+    ai_text = clean_json_response(ai_text)
+    
+    try:
+        return json.loads(ai_text)
+    except json.JSONDecodeError as e:
+        print(f"JSON Parse Error: {e}")
+        print(f"AI Response: {ai_text[:500]}")
+        return {
+            'summary': 'Analysis completed but response format was unexpected',
+            'triaged_alerts': [],
+            'critical_count': 0,
+            'recommended_actions': ['Review alerts manually']
+        }
+
+def investigate_incident_with_ai(incident):
+    """Automated investigation using AI"""
+    bedrock = get_bedrock_client()
+    prompt = build_investigation_prompt(incident)
+    
+    ai_text = call_bedrock_with_fallback(bedrock, prompt)
+    ai_text = clean_json_response(ai_text)
+    
+    try:
+        return json.loads(ai_text)
+    except json.JSONDecodeError as e:
+        print(f"JSON Parse Error in investigation: {e}")
+        print(f"AI Response: {ai_text[:500]}")
+        # Return a structured response even if JSON parsing fails
+        return {
+            'investigation_summary': ai_text[:500] if ai_text else 'Investigation completed',
+            'findings': [],
+            'timeline': [],
+            'root_cause': 'Unable to parse detailed analysis',
+            'impact_assessment': 'Please review manually',
+            'recommended_actions': [
+                {'priority': 'HIGH', 'action': 'Review incident manually', 'rationale': 'AI analysis format error'}
+            ],
+            'mitre_attack': {'tactic': 'Unknown', 'technique': 'Unknown', 'description': 'Analysis pending'},
+            'false_positive_assessment': {'likelihood': 'MEDIUM', 'reasoning': 'Requires manual review'},
+            'next_steps': ['Manual investigation required']
+        }
+
+def chat_with_bedrock(user_message, context=None):
+    """Chat with AI Security Analyst"""
+    bedrock = get_bedrock_client()
+    
+    # Build chat prompt
+    if context and context.get('last_message'):
+        prompt = f"""You are an expert AI Security Analyst assistant.
+
+Previous conversation:
+User: {context.get('last_message')}
+You: {context.get('last_response')}
+
+Current user question:
+{user_message}
+
+Provide a helpful, detailed response about cybersecurity. Be conversational but professional.
+If discussing threats or vulnerabilities, provide actionable advice.
+Keep your response clear and concise (2-4 paragraphs).
+Do NOT use markdown formatting - just plain text with line breaks."""
+    else:
+        prompt = f"""You are an expert AI Security Analyst assistant.
+
+User question:
+{user_message}
+
+Provide a helpful, detailed response about cybersecurity. Be conversational but professional.
+If discussing threats or vulnerabilities, provide actionable advice.
+Keep your response clear and concise (2-4 paragraphs).
+Do NOT use markdown formatting - just plain text with line breaks."""
+    
+    try:
+        response_text = call_bedrock_with_fallback(bedrock, prompt)
+        return response_text
+    except Exception as e:
+        print(f"Chat error: {e}")
+        return f"I apologize, but I encountered an error: {str(e)}. This may be due to API rate limits. Please try again in a moment."
+
 def build_triage_prompt(alerts, user_query, context):
-    return f"""You are a security analyst AI using AI-DLC methodology.
+    """Build prompt for alert triage"""
+    return f"""You are a security analyst AI.
 
 CONTEXT: {json.dumps(context, indent=2) if context else "First analysis"}
 ALERTS: {json.dumps(alerts, indent=2)}
 USER QUERY: {user_query or "Analyze and prioritize"}
 
-Respond with ONLY valid JSON:
+Respond with ONLY valid JSON (no markdown):
 {{
     "summary": "Brief overview",
     "critical_count": 0,
@@ -96,7 +171,8 @@ Respond with ONLY valid JSON:
 }}"""
 
 def build_investigation_prompt(incident):
-    return f"""You are an AI Security Analyst investigating a security incident.
+    """Build prompt for incident investigation"""
+    return f"""You are an AI Security Analyst investigating an incident.
 
 INCIDENT:
 ID: {incident['id']}
@@ -105,112 +181,41 @@ Description: {incident['description']}
 Severity: {incident['severity']}
 Source: {incident['source']}
 
-Perform a detailed investigation and provide results in JSON format:
+Perform a detailed investigation. Respond with ONLY valid JSON (no markdown):
 {{
-    "investigation_summary": "2-3 sentence summary of findings",
+    "investigation_summary": "2-3 sentence summary",
     "findings": [
         {{
             "title": "Finding title",
             "severity": "CRITICAL|HIGH|MEDIUM|LOW",
-            "description": "Detailed description",
-            "evidence": "Supporting evidence"
+            "description": "Description",
+            "evidence": "Evidence"
         }}
     ],
     "timeline": [
         {{
-            "timestamp": "ISO timestamp",
+            "timestamp": "2025-11-01T10:30:00Z",
             "event": "What happened",
             "significance": "Why it matters"
         }}
     ],
     "root_cause": "Root cause analysis",
-    "impact_assessment": "What systems/data were affected",
+    "impact_assessment": "What was affected",
     "recommended_actions": [
         {{
             "priority": "IMMEDIATE|HIGH|MEDIUM",
-            "action": "Specific action to take",
-            "rationale": "Why this action is needed"
+            "action": "Specific action",
+            "rationale": "Why this is needed"
         }}
     ],
     "mitre_attack": {{
         "tactic": "Tactic name",
-        "technique": "Technique ID and name",
-        "description": "How it maps to MITRE"
+        "technique": "Technique ID",
+        "description": "How it maps"
     }},
     "false_positive_assessment": {{
         "likelihood": "HIGH|MEDIUM|LOW",
-        "reasoning": "Why this may or may not be a false positive"
+        "reasoning": "Assessment reasoning"
     }},
     "next_steps": ["Step 1", "Step 2", "Step 3"]
-}}
-
-Be thorough and provide actionable intelligence."""
-
-def create_error_response(error_message):
-    return {
-        'summary': error_message,
-        'triaged_alerts': [],
-        'critical_count': 0,
-        'recommended_actions': ['Check AWS Bedrock access', 'Verify credentials']
-    }
-
-def chat_with_bedrock(user_message, context=None):
-    """Chat with AI Security Analyst using Bedrock"""
-    bedrock = get_bedrock_client()
-    
-    # Build chat prompt with context
-    if context and context.get('last_message'):
-        prompt = f"""You are an expert AI Security Analyst. 
-
-Previous conversation:
-User: {context.get('last_message')}
-You: {context.get('last_response')}
-
-Current user question:
-{user_message}
-
-Provide a helpful, detailed response about security. Be conversational but professional. 
-If the question is about security threats, vulnerabilities, or best practices, provide actionable advice.
-If you don't know something, say so honestly.
-
-Keep your response concise but informative (2-4 paragraphs)."""
-    else:
-        prompt = f"""You are an expert AI Security Analyst.
-
-User question:
-{user_message}
-
-Provide a helpful, detailed response about security. Be conversational but professional.
-If the question is about security threats, vulnerabilities, or best practices, provide actionable advice.
-If you don't know something, say so honestly.
-
-Keep your response concise but informative (2-4 paragraphs)."""
-    
-    model_ids = [
-        "anthropic.claude-3-5-sonnet-20240620-v1:0",
-        "anthropic.claude-3-sonnet-20240229-v1:0",
-        "anthropic.claude-v2:1",
-    ]
-    
-    for model_id in model_ids:
-        try:
-            response = bedrock.invoke_model(
-                modelId=model_id,
-                body=json.dumps({
-                    "anthropic_version": "bedrock-2023-05-31",
-                    "max_tokens": 2048,
-                    "temperature": 0.5,
-                    "messages": [{"role": "user", "content": prompt}]
-                })
-            )
-            
-            response_body = json.loads(response['body'].read())
-            ai_text = response_body['content'][0]['text']
-            
-            return ai_text.strip()
-            
-        except Exception as e:
-            print(f"Error with {model_id}: {e}")
-            continue
-    
-    return "I apologize, but I'm having trouble connecting to the AI service right now. Please try again in a moment."
+}}"""
