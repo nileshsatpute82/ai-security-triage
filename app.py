@@ -53,6 +53,15 @@ def init_sample_incidents():
             'status': 'New',
             'created': datetime.now().isoformat(),
             'source': 'IAM Logs'
+        },
+        {
+            'id': 'INC-20251101-005',
+            'title': 'Malware Detection on EC2 Instance',
+            'description': 'Cryptocurrency mining malware detected on production EC2 instance',
+            'severity': 'Critical',
+            'status': 'New',
+            'created': datetime.now().isoformat(),
+            'source': 'AWS GuardDuty'
         }
     ]
     for incident in sample_incidents:
